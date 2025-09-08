@@ -13,3 +13,666 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// Shared Enums
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  REMOTE
+  HOLIDAY
+}
+
+enum RoleScope {
+  SYSTEM
+  MODULE
+}
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum PayoutStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+  ADJUSTMENT
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  DISQUALIFIED
+  CONVERTED
+}
+
+enum OpportunityStage {
+  PROSPECTING
+  QUALIFICATION
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum JournalType {
+  GENERAL
+  PAYMENT
+  RECEIPT
+  ADJUSTMENT
+}
+
+enum TaxType {
+  VAT
+  WITHHOLDING
+  SALES
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  MPESA
+  BANK_TRANSFER
+  CARD
+  CHECK
+  OTHER
+}
+
+enum PaymentDirection {
+  INBOUND
+  OUTBOUND
+}
+// customer pays us / we pay vendor
+
+// ------------------------------------------------------
+// 1) Authentication & Authorization
+// ------------------------------------------------------
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  status         UserStatus     @default(ACTIVE)
+  userRoles      UserRole[]
+  departmentId   String?
+  department     Department?    @relation(fields: [departmentId], references: [id])
+  // profiles
+  employee       Employee?
+  contractor     Contractor?
+  marketer       Marketer?
+  attendance     Attendance[]
+  leaveRequests  LeaveRequest[]
+  approvedLeaves LeaveRequest[] @relation("LeaveApprover")
+  timeLogs       Timelog[]
+  contacts       Contact[]      @relation("ContactOwner")
+
+  // RBAC
+  // cross-module ownership/assigned-to
+  tasks         Task[]             @relation("TaskAssignees")
+  payouts       Payout[]
+  opportunities Opportunity[]      @relation("OpportunityOwner")
+  leads         Lead[]             @relation("LeadOwner")
+  companies     Company[]          @relation("CompanyAccountMgr")
+  comms         CommunicationLog[] @relation("CommAuthor")
+
+  // docs & notifications
+  /**
+   * /**
+   * /*notifications  Notification[]
+   * createdAt      DateTime    @default(now())
+   * updatedAt      DateTime    @updatedAt
+   */
+  @@index([departmentId])
+}
+
+model Role {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  description     String?
+  scope           RoleScope        @default(MODULE)
+  // e.g., permissions per module kept as many-to-many via RolePermission
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model Permission {
+  id              String           @id @default(cuid())
+  code            String           @unique // e.g., "PROJECT.READ", "FINANCE.POST_JOURNAL"
+  description     String?
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// ------------------------------------------------------
+// 2) Personnel Management (HR)
+// ------------------------------------------------------
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  id        String    @id @default(cuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  position  String?
+  hireDate  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Contractor {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contractNumber  String?
+  contractDetails String?
+  startDate       DateTime?
+  endDate         DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Marketer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    AttendanceStatus @default(PRESENT)
+  notes     String?
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+model LeaveRequest {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  approverId String?
+  approver   User?       @relation("LeaveApprover", fields: [approverId], references: [id])
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([userId, startDate, endDate])
+}
+
+// ------------------------------------------------------
+// 3) Project & Service Delivery
+// ------------------------------------------------------
+
+model Client {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  website   String?
+  //address     String?
+  contacts  Contact[] // from CRM (shared)
+  invoice   Invoice[]
+  company   Company[]
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([name])
+}
+
+model Project {
+  id           String         @id @default(cuid())
+  clientId     String
+  client       Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  name         String
+  description  String?
+  status       ProjectStatus  @default(PLANNED)
+  budget       Decimal?       @db.Decimal(18, 2)
+  startDate    DateTime?
+  endDate      DateTime?
+  phases       ProjectPhase[]
+  tasks        Task[]
+  deliverables Deliverable[]
+  invoices     Invoice[]
+  expenses     Expense[] // allocated expenses
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([clientId, status])
+}
+
+model ProjectPhase {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  order     Int
+  startDate DateTime?
+  endDate   DateTime?
+  tasks     Task[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([projectId, order])
+}
+
+model Task {
+  id           String        @id @default(cuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phaseId      String?
+  phase        ProjectPhase? @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  title        String
+  description  String?
+  status       TaskStatus    @default(TODO)
+  timelogs     Timelog[]
+  deliverables Deliverable[]
+  priority     Priority      @default(MEDIUM)
+  dueDate      DateTime?
+  // Many-to-many assignees
+  assignees    User[]        @relation("TaskAssignees")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([projectId, phaseId, status, dueDate])
+}
+
+model Timelog {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([taskId, userId, startTime])
+}
+
+model Deliverable {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  // Link to Document service
+  documentId  String?
+  //document    Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  dueDate     DateTime?
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([projectId, taskId])
+}
+
+// ------------------------------------------------------
+// 4) Commission & Incentive
+// ------------------------------------------------------
+model CommissionRule {
+  id          String    @id @default(cuid())
+  ruleName    String
+  description String
+  // JSON criteria example: { "appliesTo": "MARKETER", "projectMinBudget": 50000, "stage": "COMPLETED" }
+  criteria    Json
+  percentage  Decimal?  @db.Decimal(8, 4)
+  fixedAmount Decimal?  @db.Decimal(18, 2)
+  startDate   DateTime?
+  endDate     DateTime?
+  payout      Payout[]
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+}
+
+model Payout {
+  id                 String                  @id @default(cuid())
+  beneficiaryId      String // marketer/contractor user id
+  beneficiary        User                    @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  commissionRuleId   String
+  commissionRule     CommissionRule          @relation(fields: [commissionRuleId], references: [id], onDelete: Restrict)
+  referenceType      String // e.g., "PROJECT" | "INVOICE"
+  referenceId        String // id of referenced entity
+  amount             Decimal                 @db.Decimal(18, 2)
+  status             PayoutStatus            @default(PENDING)
+  scheduledDate      DateTime?
+  paidDate           DateTime?
+  transactions       CommissionTransaction[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  PaymentApplication PaymentApplication[]
+
+  @@index([beneficiaryId, status])
+}
+
+model CommissionTransaction {
+  id        String          @id @default(cuid())
+  payoutId  String
+  payout    Payout          @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  type      TransactionType
+  amount    Decimal         @db.Decimal(18, 2)
+  notes     String?
+  createdAt DateTime        @default(now())
+}
+
+// ------------------------------------------------------
+// 5) CRM
+// ------------------------------------------------------
+
+model Lead {
+  id        String     @id @default(cuid())
+  title     String
+  source    String?
+  status    LeadStatus @default(NEW)
+  ownerId   String?
+  owner     User?      @relation("LeadOwner", fields: [ownerId], references: [id])
+  companyId String?
+  company   Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId String?
+  contact   Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  notes     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([status, ownerId])
+}
+
+model Company {
+  id            String        @id @default(cuid())
+  name          String
+  industry      String?
+  size          String?
+  accountMgrId  String?
+  accountMgr    User?         @relation("CompanyAccountMgr", fields: [accountMgrId], references: [id])
+  contacts      Contact[]
+  opportunities Opportunity[]
+  leads         Lead[]
+  client        Client?       @relation(fields: [clientId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  clientId      String?
+
+  @@index([name])
+}
+
+model Contact {
+  id            String        @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String?       @unique
+  phone         String?
+  position      String?
+  leads         Lead[]
+  client        Client[]
+  companyId     String?
+  opportunities Opportunity[]
+  company       Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  ownerId       String?
+  owner         User?         @relation("ContactOwner", fields: [ownerId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([companyId])
+}
+
+model Opportunity {
+  id            String           @id @default(cuid())
+  title         String
+  companyId     String?
+  company       Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId     String?
+  contact       Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  ownerId       String?
+  owner         User?            @relation("OpportunityOwner", fields: [ownerId], references: [id])
+  value         Decimal?         @db.Decimal(18, 2)
+  expectedClose DateTime?
+  stage         OpportunityStage @default(PROSPECTING)
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([stage, ownerId])
+}
+
+model SalesPipelineStage {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CommunicationLog {
+  id         String   @id @default(cuid())
+  // polymorphic: can link to Lead, Contact, Company, Opportunity via type+id
+  entityType String // "LEAD" | "CONTACT" | "COMPANY" | "OPPORTUNITY" | "PROJECT"
+  entityId   String
+  type       String // email, call, meeting, note
+  subject    String?
+  body       String?
+  date       DateTime @default(now())
+  authorId   String?
+  author     User?    @relation("CommAuthor", fields: [authorId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, date])
+}
+
+// ------------------------------------------------------
+// 6) Finance & Accounting
+// ------------------------------------------------------
+
+model ChartOfAccounts {
+  id        String            @id @default(cuid())
+  code      String            @unique // e.g., 1000, 4000...
+  name      String
+  type      String // ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+  parentId  String?
+  expense   Expense[]
+  parent    ChartOfAccounts?  @relation("ParentAccount", fields: [parentId], references: [id])
+  children  ChartOfAccounts[] @relation("ParentAccount")
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model JournalEntry {
+  id         String      @id @default(cuid())
+  entryNo    String      @unique
+  date       DateTime
+  type       JournalType @default(GENERAL)
+  memo       String?
+  postedById String?
+  //postedBy    User?      @relation(fields: [postedById], references: [id])
+  //lines       JournalLine[]
+  createdAt  DateTime    @default(now())
+}
+
+model JournalLine {
+  id        String   @id @default(cuid())
+  journalId String
+  //journal      JournalEntry     @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  accountId String
+  //account      ChartOfAccounts  @relation(fields: [accountId], references: [id])
+  debit     Decimal? @db.Decimal(18, 2)
+  credit    Decimal? @db.Decimal(18, 2)
+  reference String?
+  createdAt DateTime @default(now())
+
+  @@index([journalId, accountId])
+}
+
+model TaxRule {
+  id            String        @id @default(cuid())
+  name          String
+  type          TaxType
+  items         InvoiceItem[]
+  expense       Expense[]
+  rate          Decimal       @db.Decimal(8, 4) // e.g., 0.1600 for 16%
+  isWithholding Boolean       @default(false)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Invoice {
+  id        String               @id @default(cuid())
+  invoiceNo String               @unique
+  clientId  String
+  client    Client               @relation(fields: [clientId], references: [id])
+  projectId String?
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  status    InvoiceStatus        @default(DRAFT)
+  issueDate DateTime
+  dueDate   DateTime?
+  currency  String               @default("KES")
+  subtotal  Decimal              @db.Decimal(18, 2)
+  taxTotal  Decimal              @default(0) @db.Decimal(18, 2)
+  total     Decimal              @db.Decimal(18, 2)
+  balance   Decimal              @db.Decimal(18, 2)
+  items     InvoiceItem[]
+  payments  PaymentApplication[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  //@@index([clientId, projectId, status])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal  @db.Decimal(18, 4)
+  unitPrice   Decimal  @db.Decimal(18, 2)
+  lineTotal   Decimal  @db.Decimal(18, 2)
+  taxRuleId   String?
+  taxRule     TaxRule? @relation(fields: [taxRuleId], references: [id])
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  projectId   String?
+  project     Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  accountId   String
+  account     ChartOfAccounts @relation(fields: [accountId], references: [id])
+  vendor      String?
+  description String?
+  date        DateTime
+  amount      Decimal         @db.Decimal(18, 2)
+  taxRuleId   String?
+  taxRule     TaxRule?        @relation(fields: [taxRuleId], references: [id])
+  createdAt   DateTime        @default(now())
+
+  @@index([projectId, date])
+}
+
+model Payment {
+  id           String               @id @default(cuid())
+  direction    PaymentDirection
+  method       PaymentMethod
+  referenceNo  String?
+  date         DateTime
+  amount       Decimal              @db.Decimal(18, 2)
+  // Customer payments apply to Invoices; vendor/contractor payments may link to Expenses or Payouts
+  applications PaymentApplication[]
+  createdAt    DateTime             @default(now())
+}
+
+model PaymentApplication {
+  id        String   @id @default(cuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  payoutId  String?
+  payout    Payout?  @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  amount    Decimal  @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId, payoutId])
+}
