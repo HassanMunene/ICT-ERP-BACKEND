@@ -1,0 +1,19 @@
+{
+  "name": "ict-erp-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HassanMunene/ICT-ERP-BACKEND.git"
+  },
+  "author": "Abdia Elema & Hassan Munene",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/HassanMunene/ICT-ERP-BACKEND/issues"
+  },
+  "homepage": "https://github.com/HassanMunene/ICT-ERP-BACKEND#readme"
+}
