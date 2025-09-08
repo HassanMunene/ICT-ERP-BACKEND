@@ -3,7 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 
-import { errorHandler } from './middleware/errorMiddleware';
+import { errorHandler } from './middleware/errorMiddleware.js';
 
 // Load env variables;
 dotenv.config();
