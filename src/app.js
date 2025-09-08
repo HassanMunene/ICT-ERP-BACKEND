@@ -37,6 +37,8 @@ app.use(express.urlencoded({ extended: true }));
 // Parse URL-encoded bodies
 app.use(cookieParser());
 
+app.use('/api/auth', authRoutes);
+
 
 // Basic Route to ensure our endpoint is working.
 app.get('/', (req, res) => {
