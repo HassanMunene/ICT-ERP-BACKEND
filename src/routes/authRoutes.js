@@ -1,12 +1,12 @@
 import express from 'express';
-import { authController } from '../controllers/authController';
+import { registerUser } from '../controllers/authController.js';
 
 const router = express.Router();
 
-router.post('/register', authController.register);
-router.post('/login', authController.login);
-router.post('/refresh-token', authController.refreshToken);
-router.post('/logout', authController.logout);
-router.get('/me', authController.getCurrentUser);
+router.post('/register', registerUser);
+// router.post('/login', authController.login);
+// router.post('/refresh-token', authController.refreshToken);
+// router.post('/logout', authController.logout);
+// router.get('/me', authController.getCurrentUser);
 
 export default router;

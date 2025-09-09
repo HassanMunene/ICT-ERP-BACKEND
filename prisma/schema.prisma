@@ -5,8 +5,10 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  provider   = "prisma-client-js"
+  output     = "../generated/prisma"
+  // Add engineType for better ESM compatibility
+  engineType = "binary"
 }
 
 datasource db {
@@ -126,6 +128,7 @@ enum PaymentDirection {
   INBOUND
   OUTBOUND
 }
+
 // customer pays us / we pay vendor
 
 // ------------------------------------------------------
@@ -162,6 +165,7 @@ model User {
 
   // docs & notifications
   /**
+   * /**
    * /**
    * /*notifications  Notification[]
    * createdAt      DateTime    @default(now())

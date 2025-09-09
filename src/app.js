@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 
 import { errorHandler } from './middleware/errorMiddleware.js';
+import authRoutes from './routes/authRoutes.js';
 
 // Load env variables;
 dotenv.config();

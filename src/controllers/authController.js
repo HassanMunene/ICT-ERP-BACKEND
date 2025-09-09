@@ -1,12 +1,12 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma } from "../prismaClient/prismaClient.js";
+import { prisma } from '../prisma/index.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Token generation functions
 const generateAccessToken = (userId, email, roles) => {
-    return jwt.sign({ userId, email, roles }, JWT_SECRET, { expiresIn: '15m' });
+    return jwt.sign({ userId, email, roles }, JWT_SECRET, { expiresIn: '30d' });
 };
 
 export const registerUser = async (req, res) => {
@@ -29,13 +29,13 @@ export const registerUser = async (req, res) => {
         // Create user with roles
         const user = await prisma.user.create({
             data: {
-                email,
-                passwordHash,
-                firstName,
-                lastName,
-                departmentId,
+                email: email,
+                passwordHash: passwordHash,
+                firstName: firstName,
+                lastName: lastName,
+                departmentId: departmentId,
                 userRoles: {
-                    create: roles.map((roleId: string) => ({
+                    create: roles.map((roleId) => ({
                         role: { connect: { id: roleId } }
                     }))
                 }
@@ -53,30 +53,13 @@ export const registerUser = async (req, res) => {
         // Generate tokens
         const userRoles = user.userRoles.map(ur => ur.role.name);
         const accessToken = generateAccessToken(user.id, user.email, userRoles);
-        const refreshToken = generateRefreshToken(user.id);
-
-        // Store refresh token in database
-        await prisma.refreshToken.create({
-            data: {
-                token: refreshToken,
-                userId: user.id,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-            }
-        });
 
         // Set cookies
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 15 * 60 * 1000 // 15 minutes
-        });
-
-        res.cookie('refreshToken', refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+            sameSite: 'None',
+            maxAge: 30 * 24 * 60 * 60 * 1000,
         });
 
         // Return user data without password and include tokens in response
@@ -84,8 +67,7 @@ export const registerUser = async (req, res) => {
         res.status(201).json({
             message: 'User registered successfully',
             user: userWithoutPassword,
-            accessToken,
-            refreshToken
+            accessToken
         });
 
     } catch (error) {
