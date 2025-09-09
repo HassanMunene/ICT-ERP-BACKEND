@@ -688,7 +688,6 @@ model PaymentApplication {
 // 7) Document Management & Shared Services
 // ------------------------------------------------------
 
- main
 model Document {
   id         String            @id @default(cuid())
   filename   String
