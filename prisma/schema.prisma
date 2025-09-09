@@ -21,6 +21,7 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+  PENDING_APPROVAL
 }
 
 enum LeaveStatus {
@@ -167,6 +168,7 @@ model User {
 
   // docs & notifications
   /**
+   * /**
    * /**
    * /*notifications  Notification[]
    * createdAt      DateTime    @default(now())
