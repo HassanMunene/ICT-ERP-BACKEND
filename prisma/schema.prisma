@@ -676,3 +676,22 @@ model PaymentApplication {
 
   @@index([invoiceId, payoutId])
 }
+
+// ------------------------------------------------------
+// 7) Document Management & Shared Services
+// ------------------------------------------------------
+
+model Document {
+  id           String   @id @default(cuid())
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  storageKey   String   // path/key in storage
+  checksum     String?
+  ownerType    String?  // e.g., "PROJECT","DELIVERABLE","INVOICE","USER"
+  ownerId      String?
+  //versions     DocumentVersion[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@index([ownerType, ownerId])
+}
