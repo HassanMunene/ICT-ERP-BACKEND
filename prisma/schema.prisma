@@ -162,10 +162,11 @@ model User {
   leads         Lead[]             @relation("LeadOwner")
   companies     Company[]          @relation("CompanyAccountMgr")
   comms         CommunicationLog[] @relation("CommAuthor")
+  Notification  Notification[]
+  ReportJob     ReportJob[]
 
   // docs & notifications
   /**
-   * /**
    * /**
    * /*notifications  Notification[]
    * createdAt      DateTime    @default(now())
@@ -679,4 +680,62 @@ model PaymentApplication {
   createdAt DateTime @default(now())
 
   @@index([invoiceId, payoutId])
+}
+
+// ------------------------------------------------------
+// 7) Document Management & Shared Services
+// ------------------------------------------------------
+
+model Document {
+  id         String            @id @default(cuid())
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String // path/key in storage
+  checksum   String?
+  ownerType  String? // e.g., "PROJECT","DELIVERABLE","INVOICE","USER"
+  ownerId    String?
+  versions   DocumentVersion[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([ownerType, ownerId])
+}
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version    Int
+  storageKey String
+  createdAt  DateTime @default(now())
+
+  @@unique([documentId, version])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  channel     String // EMAIL | SMS | PUSH | IN_APP
+  templateKey String? // optional reference to template
+  subject     String?
+  payload     Json
+  status      String    @default("QUEUED")
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, status])
+}
+
+model ReportJob {
+  id          String   @id @default(cuid())
+  name        String
+  params      Json
+  status      String   @default("PENDING") // PENDING | RUNNING | SUCCESS | FAILED
+  resultKey   String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
