@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 5000;
 const app = express();
 
 const allowedOrigins = [
-    'https://ict-erp.vercel.app/',
+    'https://ict-erp.vercel.app',
     'http://localhost:5173'
 ];
 

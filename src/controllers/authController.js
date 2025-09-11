@@ -65,3 +65,79 @@ export const registerUser = async (req, res) => {
         res.status(500).json({ message: 'Internal server error' });
     }
 }
+
+export const loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({
+            where: { email },
+            include: {
+                userRoles: {
+                    include: {
+                        role: true
+                    }
+                },
+                department: true,
+                employee: true,
+                contractor: true,
+                marketer: true
+            }
+        });
+
+        if (!user) {
+            return res.status(401).json({
+                message: 'Invalid email or password'
+            });
+        }
+
+        // Check if user is approved
+        if (user.status !== 'ACTIVE') {
+            return res.status(403).json({
+                message: 'Account pending approval. Please contact administrator.',
+                requiresApproval: true
+            });
+        }
+
+        // Verify password
+        const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+        if (!isValidPassword) {
+            return res.status(401).json({
+                message: 'Invalid email or password'
+            });
+        }
+
+        // Get user roles
+        const userRoles = user.userRoles.map(ur => ur.role.name);
+
+        // Generate tokens
+        const accessToken = generateAccessToken(user.id, user.email, userRoles);
+
+        // Set HTTP-only cookies
+        res.cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'None',
+            maxAge: 30 * 24 * 60 * 60 * 1000
+        });
+
+        // Return user data without password
+        const { passwordHash, ...userWithoutPassword } = user;
+
+        res.json({
+            message: 'Login successful',
+            user: {
+                ...userWithoutPassword,
+                roles: userRoles
+            },
+            accessToken,
+        });
+
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({
+            message: 'Internal server error'
+        });
+    }
+};
